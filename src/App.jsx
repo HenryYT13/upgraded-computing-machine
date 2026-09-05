@@ -131,8 +131,8 @@ export default function App() {
   const exportToCSV = () => {
     const headers = [
       'STT', 'Mã đơn', 'Ngày', 'Khách hàng', 'SĐT', 'Địa chỉ giao', 'Hàng hóa', 
-      'SL', 'Đơn vị VC', 'Tài xế', 'Biển số', 'Giờ xuất', 'Dự kiến đến', 
-      'Giờ giao thực tế', 'Trạng thái', 'Phí VC', 'Tiền hàng', 'Người nhận', 'Ghi chú'
+      'Số lượng', 'Đơn vị vận chuyển', 'Tài xế', 'Biển số', 'Giờ xuất', 'Dự kiến đến', 
+      'Giờ giao thực tế', 'Trạng thái', 'Phí vận chuyển', 'Tiền hàng', 'Người nhận', 'Ghi chú'
     ];
     const rows = filteredDeliveries.map((d, index) => [
       index + 1, d.order_code, d.order_date, d.customer_name, d.phone, `"${d.delivery_address || ''}"`, 
@@ -426,15 +426,15 @@ export default function App() {
                       <th className="px-4 py-4">SĐT</th>
                       <th className="px-4 py-4">Địa chỉ giao</th>
                       <th className="px-4 py-4">Hàng hóa</th>
-                      <th className="px-4 py-4 text-center">SL</th>
-                      <th className="px-4 py-4">Đơn vị VC</th>
+                      <th className="px-4 py-4 text-center">Số lượng</th>
+                      <th className="px-4 py-4">Đơn vị vận chuyển</th>
                       <th className="px-4 py-4">Tài xế</th>
                       <th className="px-4 py-4">Biển số</th>
                       <th className="px-4 py-4">Giờ xuất</th>
                       <th className="px-4 py-4">Dự kiến</th>
-                      <th className="px-4 py-4">Giờ TT</th>
+                      <th className="px-4 py-4">Giờ thực tế</th>
                       <th className="px-4 py-4">Trạng thái</th>
-                      <th className="px-4 py-4 text-right">Phí VC</th>
+                      <th className="px-4 py-4 text-right">Phí vận tể</th>
                       <th className="px-4 py-4 text-right">Tiền hàng</th>
                       <th className="px-4 py-4">Người nhận</th>
                       <th className="px-4 py-4">Ghi chú</th>
