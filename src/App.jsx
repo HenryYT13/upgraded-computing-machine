@@ -35,6 +35,23 @@ export default function App() {
 
   useEffect(() => {
     fetchDeliveries();
+
+    // SETUP SUPABASE REALTIME SUBSCRIPTION
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'deliveries' },
+        (payload) => {
+          // Whenever any change happens on the database, fetch fresh data instantly!
+          fetchDeliveries();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchDeliveries = async () => {
@@ -49,7 +66,7 @@ export default function App() {
 
   const randomizeOrderCode = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
-    setFormData({ ...formData, order_code: `DV${randomNum}` });
+    setFormData({ ...formData, order_code: `DV-${randomNum}` });
   };
 
   const handleFilterChange = (e) => {
@@ -75,14 +92,12 @@ export default function App() {
       const { error } = await supabase.from('deliveries').update(submitData).eq('id', editingId);
       if (!error) {
         alert('Đã cập nhật đơn hàng thành công!');
-        fetchDeliveries();
         handleCancelEdit();
       } else alert('Lỗi cập nhật: ' + error.message);
     } else {
       const { error } = await supabase.from('deliveries').insert([submitData]);
       if (!error) {
         alert('Đã thêm đơn hàng thành công!'); 
-        fetchDeliveries();
         setFormData(defaultForm);
         setShowForm(false);
       } else alert('Lỗi thêm mới: ' + error.message);
@@ -92,10 +107,8 @@ export default function App() {
   const handleDelete = async (id) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa đơn hàng này vĩnh viễn?')) return;
     const { error } = await supabase.from('deliveries').delete().eq('id', id);
-    if (!error) {
-      setDeliveries(deliveries.filter(d => d.id !== id));
-      if (editingId === id) handleCancelEdit();
-    } else alert('Lỗi khi xóa: ' + error.message);
+    if (error) alert('Lỗi khi xóa: ' + error.message);
+    else if (editingId === id) handleCancelEdit();
   };
 
   const handleEdit = (delivery) => {
@@ -114,9 +127,7 @@ export default function App() {
 
   const updateStatus = async (id, newStatus) => {
     const { error } = await supabase.from('deliveries').update({ status: newStatus }).eq('id', id);
-    if (!error) {
-      setDeliveries(deliveries.map(d => d.id === id ? { ...d, status: newStatus } : d));
-    } else alert('Lỗi cập nhật trạng thái: ' + error.message);
+    if (error) alert('Lỗi cập nhật trạng thái: ' + error.message);
   };
 
   const filteredDeliveries = deliveries.filter(d => {
@@ -131,8 +142,8 @@ export default function App() {
   const exportToCSV = () => {
     const headers = [
       'STT', 'Mã đơn', 'Ngày', 'Khách hàng', 'SĐT', 'Địa chỉ giao', 'Hàng hóa', 
-      'Số lượng', 'Đơn vị vận chuyển', 'Tài xế', 'Biển số', 'Giờ xuất', 'Dự kiến đến', 
-      'Giờ giao thực tế', 'Trạng thái', 'Phí vận chuyển', 'Tiền hàng', 'Người nhận', 'Ghi chú'
+      'SL', 'Đơn vị VC', 'Tài xế', 'Biển số', 'Giờ xuất', 'Dự kiến đến', 
+      'Giờ giao thực tế', 'Trạng thái', 'Phí VC', 'Tiền hàng', 'Người nhận', 'Ghi chú'
     ];
     const rows = filteredDeliveries.map((d, index) => [
       index + 1, d.order_code, d.order_date, d.customer_name, d.phone, `"${d.delivery_address || ''}"`, 
@@ -224,7 +235,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         
-        {/* TAB 1: DASHBOARD (Borderless Clean Tables) */}
+        {/* TAB 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-2xl font-bold text-blue-700 mb-6 tracking-wide">TỔNG HỢP VẬN CHUYỂN</h2>
@@ -232,7 +243,6 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-10">
               
               <div className="space-y-10">
-                {/* Main Summary Table - Borderless */}
                 <table className="w-full text-sm">
                   <tbody className="divide-y divide-slate-100">
                     <tr className="bg-blue-50/50 font-bold text-slate-800">
@@ -270,7 +280,6 @@ export default function App() {
                   </tbody>
                 </table>
 
-                {/* Driver Summary Table - Borderless */}
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-100">
@@ -426,15 +435,15 @@ export default function App() {
                       <th className="px-4 py-4">SĐT</th>
                       <th className="px-4 py-4">Địa chỉ giao</th>
                       <th className="px-4 py-4">Hàng hóa</th>
-                      <th className="px-4 py-4 text-center">Số lượng</th>
-                      <th className="px-4 py-4">Đơn vị vận chuyển</th>
+                      <th className="px-4 py-4 text-center">SL</th>
+                      <th className="px-4 py-4">Đơn vị VC</th>
                       <th className="px-4 py-4">Tài xế</th>
                       <th className="px-4 py-4">Biển số</th>
                       <th className="px-4 py-4">Giờ xuất</th>
                       <th className="px-4 py-4">Dự kiến</th>
-                      <th className="px-4 py-4">Giờ thực tế</th>
+                      <th className="px-4 py-4">Giờ TT</th>
                       <th className="px-4 py-4">Trạng thái</th>
-                      <th className="px-4 py-4 text-right">Phí vận tể</th>
+                      <th className="px-4 py-4 text-right">Phí VC</th>
                       <th className="px-4 py-4 text-right">Tiền hàng</th>
                       <th className="px-4 py-4">Người nhận</th>
                       <th className="px-4 py-4">Ghi chú</th>
