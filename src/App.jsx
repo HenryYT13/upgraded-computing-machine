@@ -21,7 +21,7 @@ export default function App() {
   const defaultForm = {
     order_code: '', order_date: new Date().toISOString().split('T')[0],
     customer_name: '', phone: '', delivery_address: '', product_name: '',
-    quantity: '', carrier_unit: 'Nội bộ', driver_name: '', license_plate: '',
+    quantity: '', unit_price: '', carrier_unit: 'Nội bộ', driver_name: '', license_plate: '',
     departure_time: '', estimated_arrival: '', actual_arrival: '',
     status: 'Chuẩn bị', shipping_fee: 0, order_amount: 0, receiver_name: '', notes: ''
   };
@@ -36,14 +36,12 @@ export default function App() {
   useEffect(() => {
     fetchDeliveries();
 
-    // SETUP SUPABASE REALTIME SUBSCRIPTION
     const channel = supabase
       .channel('schema-db-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'deliveries' },
-        (payload) => {
-          // Whenever any change happens on the database, fetch fresh data instantly!
+        () => {
           fetchDeliveries();
         }
       )
@@ -61,12 +59,23 @@ export default function App() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    let updatedForm = { ...formData, [name]: value };
+
+    // Tự động tính tiền hàng khi người dùng nhập Số lượng hoặc Đơn giá
+    if (name === 'quantity' || name === 'unit_price') {
+      const qty = name === 'quantity' ? Number(value) : Number(formData.quantity);
+      const price = name === 'unit_price' ? Number(value) : Number(formData.unit_price);
+      if (qty > 0 && price > 0) {
+        updatedForm.order_amount = qty * price;
+      }
+    }
+
+    setFormData(updatedForm);
   };
 
   const randomizeOrderCode = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
-    setFormData({ ...formData, order_code: `DV-${randomNum}` });
+    setFormData({ ...formData, order_code: `DV${randomNum}` });
   };
 
   const handleFilterChange = (e) => {
@@ -86,7 +95,10 @@ export default function App() {
     if (!submitData.actual_arrival) submitData.actual_arrival = null;
     if (!submitData.quantity) submitData.quantity = 0;
 
-    delete submitData.id; delete submitData.created_at;
+    // Loại bỏ trường phụ unit_price trước khi gửi lên Supabase (vì DB giữ nguyên cấu trúc cũ của bạn)
+    delete submitData.unit_price;
+    delete submitData.id; 
+    delete submitData.created_at;
 
     if (editingId) {
       const { error } = await supabase.from('deliveries').update(submitData).eq('id', editingId);
@@ -113,7 +125,10 @@ export default function App() {
 
   const handleEdit = (delivery) => {
     setActiveTab('data');
-    setFormData(delivery);
+    setFormData({
+      ...delivery,
+      unit_price: delivery.quantity > 0 ? Math.round(delivery.order_amount / delivery.quantity) : ''
+    });
     setEditingId(delivery.id);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -381,7 +396,11 @@ export default function App() {
                     
                     <div className="md:col-span-2"><label className={labelClass}>Địa chỉ giao</label><input name="delivery_address" value={formData.delivery_address} onChange={handleInputChange} placeholder="Địa chỉ chi tiết" className={inputClass} /></div>
                     <div><label className={labelClass}>Hàng hóa</label><input name="product_name" value={formData.product_name} onChange={handleInputChange} placeholder="Tên hàng hóa" className={inputClass} /></div>
+                    
                     <div><label className={labelClass}>Số lượng</label><input type="number" name="quantity" value={formData.quantity} onChange={handleInputChange} placeholder="0" className={inputClass} /></div>
+
+                    {/* Ô ĐƠN GIÁ ĐỂ TÍNH TIỀN TỰ ĐỘNG */}
+                    <div><label className={labelClass}>Đơn giá (VNĐ)</label><input type="number" name="unit_price" value={formData.unit_price} onChange={handleInputChange} placeholder="VD: 139" className={inputClass} /></div>
 
                     <div><label className={labelClass}>Đơn vị VC</label><select name="carrier_unit" value={formData.carrier_unit} onChange={handleInputChange} className={inputClass}>{carrierUnits.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                     <div><label className={labelClass}>Tài xế</label><input name="driver_name" value={formData.driver_name} onChange={handleInputChange} placeholder="Tên tài xế" className={inputClass} /></div>
@@ -394,7 +413,12 @@ export default function App() {
                     <div><label className={labelClass}>Người nhận</label><input name="receiver_name" value={formData.receiver_name} onChange={handleInputChange} placeholder="Tên người nhận" className={inputClass} /></div>
 
                     <div className="md:col-span-2"><label className={labelClass}>Phí vận chuyển (VNĐ)</label><input type="number" name="shipping_fee" value={formData.shipping_fee} onChange={handleInputChange} placeholder="0" className={inputClass} /></div>
-                    <div className="md:col-span-2"><label className={labelClass}>Tiền hàng (VNĐ)</label><input type="number" name="order_amount" value={formData.order_amount} onChange={handleInputChange} placeholder="0" className={inputClass} /></div>
+                    
+                    {/* TIỀN HÀNG TỰ ĐỘNG NHẢY SỐ */}
+                    <div className="md:col-span-2">
+                      <label className={labelClass}>Tiền hàng (VNĐ) <span className="text-indigo-600 font-semibold">(Tự tính)</span></label>
+                      <input type="number" name="order_amount" value={formData.order_amount} onChange={handleInputChange} placeholder="0" className={inputClass} />
+                    </div>
 
                     <div className="md:col-span-4"><label className={labelClass}>Ghi chú</label><input name="notes" value={formData.notes} onChange={handleInputChange} placeholder="Nhập ghi chú thêm..." className={inputClass} /></div>
                   </div>
@@ -523,10 +547,10 @@ export default function App() {
                 <section>
                   <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-3">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600 text-sm">1</span> 
-                    Lọc và Thêm mới đơn hàng
+                    Tính năng tự động nhân đơn giá
                   </h3>
                   <div className="ml-11 text-slate-600 text-sm leading-relaxed space-y-3">
-                    <p>Thanh <b>TÌM KIẾM ĐƠN HÀNG</b> cho phép bạn lọc dữ liệu theo Mã đơn, khoảng thời gian, khách hàng và trạng thái.</p>
+                    <p>Khi nhập <b>Số lượng</b> và <b>Đơn giá</b>, hệ thống sẽ tự động nhân kết quả và điền thẳng vào ô <b>Tiền hàng</b> giúp bạn.</p>
                   </div>
                 </section>
               </div>
