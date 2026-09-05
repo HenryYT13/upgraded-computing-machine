@@ -47,7 +47,6 @@ export default function App() {
     setFormData({ ...formData, [name]: value });
   };
 
-  // Helper to generate a random tracking code
   const randomizeOrderCode = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     setFormData({ ...formData, order_code: `DV${randomNum}` });
@@ -225,7 +224,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         
-        {/* TAB 1: DASHBOARD */}
+        {/* TAB 1: DASHBOARD (Borderless Clean Tables) */}
         {activeTab === 'dashboard' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-2xl font-bold text-blue-700 mb-6 tracking-wide">TỔNG HỢP VẬN CHUYỂN</h2>
@@ -233,69 +232,71 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-10">
               
               <div className="space-y-10">
-                <table className="w-full text-sm border-collapse border border-slate-300">
-                  <tbody className="divide-y divide-slate-300">
-                    <tr className="bg-blue-50/70">
-                      <td className="px-4 py-2.5 font-bold text-slate-800 border-r border-slate-300 w-2/3">Tổng số đơn/chuyến</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-slate-800">{totalOrders}</td>
+                {/* Main Summary Table - Borderless */}
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-slate-100">
+                    <tr className="bg-blue-50/50 font-bold text-slate-800">
+                      <td className="py-3 px-2 w-2/3">Tổng số đơn/chuyến</td>
+                      <td className="py-3 px-2 text-right">{totalOrders}</td>
                     </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-semibold text-slate-700 border-r border-slate-300">Đã giao</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{totalDelivered}</td>
+                    <tr className="hover:bg-slate-50/50 text-slate-600">
+                      <td className="py-3 px-2">Đã giao</td>
+                      <td className="py-3 px-2 text-right font-medium text-slate-900">{totalDelivered}</td>
                     </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-semibold text-slate-700 border-r border-slate-300">Đang vận chuyển</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{totalShipping}</td>
+                    <tr className="hover:bg-slate-50/50 text-slate-600">
+                      <td className="py-3 px-2">Đang vận chuyển</td>
+                      <td className="py-3 px-2 text-right font-medium text-slate-900">{totalShipping}</td>
                     </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-semibold text-slate-700 border-r border-slate-300">Giao thất bại</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{totalFailed}</td>
+                    <tr className="hover:bg-slate-50/50 text-slate-600">
+                      <td className="py-3 px-2">Giao thất bại</td>
+                      <td className="py-3 px-2 text-right font-medium text-slate-900">{totalFailed}</td>
                     </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-semibold text-slate-700 border-r border-slate-300">Đã hủy</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{totalCancelled}</td>
+                    <tr className="hover:bg-slate-50/50 text-slate-600">
+                      <td className="py-3 px-2">Đã hủy</td>
+                      <td className="py-3 px-2 text-right font-medium text-slate-900">{totalCancelled}</td>
                     </tr>
-                    <tr className="bg-blue-50/30">
-                      <td className="px-4 py-2.5 font-bold text-slate-800 border-r border-slate-300">Tổng số lượng hàng</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{totalQuantity}</td>
+                    <tr className="bg-slate-50/50 font-semibold text-slate-800">
+                      <td className="py-3 px-2">Tổng số lượng hàng</td>
+                      <td className="py-3 px-2 text-right">{totalQuantity}</td>
                     </tr>
-                    <tr className="bg-blue-50/30">
-                      <td className="px-4 py-2.5 font-bold text-slate-800 border-r border-slate-300">Tổng phí vận chuyển</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{totalShippingFee.toLocaleString()}</td>
+                    <tr className="bg-slate-50/50 font-semibold text-slate-800">
+                      <td className="py-3 px-2">Tổng phí vận chuyển</td>
+                      <td className="py-3 px-2 text-right">{totalShippingFee.toLocaleString()}</td>
                     </tr>
-                    <tr className="bg-blue-50/70">
-                      <td className="px-4 py-2.5 font-bold text-slate-800 border-r border-slate-300">Tổng tiền hàng</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-slate-800">{totalOrderAmount.toLocaleString()}</td>
+                    <tr className="bg-blue-50/50 font-bold text-slate-900 text-base">
+                      <td className="py-3 px-2">Tổng tiền hàng</td>
+                      <td className="py-3 px-2 text-right text-emerald-600">{totalOrderAmount.toLocaleString()}</td>
                     </tr>
                   </tbody>
                 </table>
 
-                <table className="w-full text-sm border-collapse border border-slate-300">
+                {/* Driver Summary Table - Borderless */}
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50">
-                      <th className="px-4 py-2.5 text-left font-bold text-slate-700 border-r border-slate-300 border-b border-slate-300">Tài xế</th>
-                      <th className="px-4 py-2.5 text-right font-bold text-slate-700 border-r border-slate-300 border-b border-slate-300">Số chuyến</th>
-                      <th className="px-4 py-2.5 text-right font-bold text-slate-700 border-b border-slate-300">Phí vận chuyển</th>
+                    <tr className="text-xs uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-100">
+                      <th className="py-3 px-2 text-left">Tài xế</th>
+                      <th className="py-3 px-2 text-right">Số chuyến</th>
+                      <th className="py-3 px-2 text-right">Phí vận chuyển</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-300">
+                  <tbody className="divide-y divide-slate-100">
                     {driverArray.map((driver, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="px-4 py-2.5 text-slate-700 font-medium border-r border-slate-300">{driver.name}</td>
-                        <td className="px-4 py-2.5 text-right text-slate-700 border-r border-slate-300">{driver.count}</td>
-                        <td className="px-4 py-2.5 text-right text-slate-700">{driver.fee.toLocaleString()}</td>
+                      <tr key={idx} className="hover:bg-slate-50/50 text-slate-700">
+                        <td className="py-3 px-2 font-medium">{driver.name}</td>
+                        <td className="py-3 px-2 text-right">{driver.count}</td>
+                        <td className="py-3 px-2 text-right">{driver.fee.toLocaleString()}</td>
                       </tr>
                     ))}
                     {driverArray.length === 0 && (
-                      <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">Chưa có dữ liệu</td></tr>
+                      <tr><td colSpan="3" className="py-4 text-center text-slate-400">Chưa có dữ liệu</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
 
               <div className="space-y-10">
-                <div className="border border-slate-300 p-6 flex flex-col items-center bg-white shadow-sm">
-                  <h3 className="font-bold text-slate-500 mb-6 text-lg">Tỷ lệ theo trạng thái</h3>
+                <div className="p-6 flex flex-col items-center bg-slate-50/50 rounded-2xl border border-slate-100 shadow-sm">
+                  <h3 className="font-bold text-slate-500 mb-6 text-sm uppercase tracking-wider">Tỷ lệ theo trạng thái</h3>
                   <div className="w-full h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -304,7 +305,7 @@ export default function App() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                         <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
                       </PieChart>
                     </ResponsiveContainer>
@@ -355,7 +356,6 @@ export default function App() {
                 <form onSubmit={handleSubmit} className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-5">
                     
-                    {/* ORDER CODE WITH RANDOM BUTTON */}
                     <div>
                       <label className={labelClass}>Mã đơn <span className="text-rose-500">*</span></label>
                       <div className="flex gap-2">
