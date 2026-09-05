@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Download, Plus, LayoutDashboard, List, Edit, Trash2, X, BookOpen, Truck, Search, FilterX, Dices } from 'lucide-react';
+import { Download, Plus, LayoutDashboard, List, Edit, Trash2, X, BookOpen, Truck, Search, FilterX, Dices, FileText } from 'lucide-react';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, WidthType, BorderStyle, ImageRun, VerticalAlign, TableLayoutType } from 'docx';
+import { saveAs } from 'file-saver';
+import logoImage from './logo.jpg';
 
 // Initialize Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -61,7 +64,6 @@ export default function App() {
     const { name, value } = e.target;
     let updatedForm = { ...formData, [name]: value };
 
-    // Tự động tính tiền hàng khi người dùng nhập Số lượng hoặc Đơn giá
     if (name === 'quantity' || name === 'unit_price') {
       const qty = name === 'quantity' ? Number(value) : Number(formData.quantity);
       const price = name === 'unit_price' ? Number(value) : Number(formData.unit_price);
@@ -75,7 +77,7 @@ export default function App() {
 
   const randomizeOrderCode = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
-    setFormData({ ...formData, order_code: `DV${randomNum}` });
+    setFormData({ ...formData, order_code: `DV-${randomNum}` });
   };
 
   const handleFilterChange = (e) => {
@@ -95,7 +97,6 @@ export default function App() {
     if (!submitData.actual_arrival) submitData.actual_arrival = null;
     if (!submitData.quantity) submitData.quantity = 0;
 
-    // Loại bỏ trường phụ unit_price trước khi gửi lên Supabase (vì DB giữ nguyên cấu trúc cũ của bạn)
     delete submitData.unit_price;
     delete submitData.id; 
     delete submitData.created_at;
@@ -154,13 +155,254 @@ export default function App() {
     return true;
   });
 
-  const exportToCSV = () => {
+  // --- NHÓM ĐƠN HÀNG THEO NĂM ĐỂ XUẤT FILE TỔNG HỢP ---
+  const groupedByYear = filteredDeliveries.reduce((acc, delivery) => {
+    const year = (delivery.order_date || '').substring(0, 4);
+    if (!year) return acc;
+    if (!acc[year]) acc[year] = [];
+    acc[year].push(delivery);
+    return acc;
+  }, {});
+
+  const sortedYears = Object.keys(groupedByYear).sort((a, b) => b.localeCompare(a));
+
+  const formatMonthYear = (yyyyMM) => {
+    if (!yyyyMM || !yyyyMM.includes('-')) return "Không rõ";
+    const [year, month] = yyyyMM.split('-');
+    return `${month}/${year}`;
+  };
+
+  // --- HÀM XUẤT WORD CHUẨN LIBREOFFICE (MỞ RỘNG CHO CẢ NĂM/THÁNG) ---
+  const exportToDocx = async (dataList, periodLabel) => {
+    try {
+      const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: "000000" };
+      const customBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder, insideHorizontal: thinBorder, insideVertical: thinBorder };
+
+      let imageRun = null;
+      try {
+        const response = await fetch(logoImage);
+        if (response.ok) {
+          const blob = await response.blob();
+          if (blob.type.startsWith("image/")) {
+            const arrayBuffer = await blob.arrayBuffer();
+            imageRun = new ImageRun({
+              data: arrayBuffer,
+              transformation: { width: 110, height: 110 },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Không tải được logo:", err);
+      }
+
+      const headerTable = new Table({
+        layout: TableLayoutType.FIXED,
+        columnWidths: [2200, 5000, 3600],
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                rowSpan: 6,
+                width: { size: 2200, type: WidthType.DXA },
+                verticalAlign: VerticalAlign.CENTER,
+                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: imageRun ? [imageRun] : [new TextRun({ text: "[ LOGO ]", bold: true, color: "0066CC" })],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 80, after: 80 }
+                  }),
+                ],
+              }),
+              new TableCell({
+                columnSpan: 2,
+                width: { size: 8600, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: noBorder, left: noBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "CÔNG TY TNHH ĐẦU TƯ THƯƠNG MẠI THỦY SẢN ĐẠI VIỆT", bold: true, size: 24 })],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 40 }
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                columnSpan: 2,
+                width: { size: 8600, type: WidthType.DXA },
+                borders: { top: noBorder, bottom: noBorder, left: noBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Trụ sở chính: Khánh Nhơn 1, Vĩnh Hải, Khánh Hòa", italics: true, size: 20 })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                columnSpan: 2,
+                width: { size: 8600, type: WidthType.DXA },
+                borders: { top: noBorder, bottom: noBorder, left: noBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Trụ sở 2: Tân Hải, Quỳnh Anh, Nghệ An", italics: true, size: 20 })],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 120 },
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 5000, type: WidthType.DXA },
+                borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Email: thuysandaiviet36@gmail.com", size: 20 })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+              }),
+              new TableCell({
+                width: { size: 3600, type: WidthType.DXA },
+                borders: { top: noBorder, bottom: noBorder, left: noBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Hotline: 0973.433.999", size: 20 })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                columnSpan: 2,
+                width: { size: 8600, type: WidthType.DXA },
+                borders: { top: noBorder, bottom: noBorder, left: noBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Số tài khoản: 123.013.3939 Ngân hàng Vietcombank", size: 20 })],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 120, after: 120 },
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                columnSpan: 2,
+                width: { size: 8600, type: WidthType.DXA },
+                borders: { top: noBorder, bottom: thinBorder, left: noBorder, right: thinBorder },
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Website: www.thuysandaiviet.com; Fanpage: www.facebook.com/tomgiongdaiviet", size: 18, color: "0000FF" })],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 60 }
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      });
+
+      const colWidths = [450, 950, 1300, 1300, 950, 950, 500, 1000, 900, 1300, 1200];
+
+      const dataTableRows = [
+        new TableRow({
+          children: [
+            new TableCell({ width: { size: colWidths[0], type: WidthType.DXA }, children: [new Paragraph({ text: "STT", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[1], type: WidthType.DXA }, children: [new Paragraph({ text: "Ngày xuất", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[2], type: WidthType.DXA }, children: [new Paragraph({ text: "Họ tên khách hàng", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[3], type: WidthType.DXA }, children: [new Paragraph({ text: "Địa chỉ", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[4], type: WidthType.DXA }, children: [new Paragraph({ text: "Số điện thoại", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[5], type: WidthType.DXA }, children: [new Paragraph({ text: "Tổng xuất", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[6], type: WidthType.DXA }, children: [new Paragraph({ text: "KM %", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[7], type: WidthType.DXA }, children: [new Paragraph({ text: "Số lượng tính tiền", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[8], type: WidthType.DXA }, children: [new Paragraph({ text: "Đơn giá", bold: true, alignment: AlignmentType.CENTER }), new Paragraph({ text: "(đồng)", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[9], type: WidthType.DXA }, children: [new Paragraph({ text: "Tổng tiền", bold: true, alignment: AlignmentType.CENTER }), new Paragraph({ text: "(đồng)", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+            new TableCell({ width: { size: colWidths[10], type: WidthType.DXA }, children: [new Paragraph({ text: "Ghi chú", bold: true, alignment: AlignmentType.CENTER })], borders: customBorders }),
+          ],
+        }),
+      ];
+
+      dataList.forEach((d, index) => {
+        const unitP = d.quantity > 0 ? Math.round(d.order_amount / d.quantity) : 0;
+        dataTableRows.push(
+          new TableRow({
+            children: [
+              new TableCell({ width: { size: colWidths[0], type: WidthType.DXA }, children: [new Paragraph({ text: `${index + 1}`, alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[1], type: WidthType.DXA }, children: [new Paragraph({ text: d.order_date || '', alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[2], type: WidthType.DXA }, children: [new Paragraph({ text: d.customer_name || '' })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[3], type: WidthType.DXA }, children: [new Paragraph({ text: d.delivery_address || '' })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[4], type: WidthType.DXA }, children: [new Paragraph({ text: d.phone || '', alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[5], type: WidthType.DXA }, children: [new Paragraph({ text: `${d.quantity || 0}`, alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[6], type: WidthType.DXA }, children: [new Paragraph({ text: "0", alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[7], type: WidthType.DXA }, children: [new Paragraph({ text: `${d.quantity || 0}`, alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[8], type: WidthType.DXA }, children: [new Paragraph({ text: `${unitP}`, alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[9], type: WidthType.DXA }, children: [new Paragraph({ text: `${Number(d.order_amount || 0).toLocaleString()}`, alignment: AlignmentType.CENTER })], borders: customBorders }),
+              new TableCell({ width: { size: colWidths[10], type: WidthType.DXA }, children: [new Paragraph({ text: d.notes || '' })], borders: customBorders }),
+            ],
+          })
+        );
+      });
+
+      const doc = new Document({
+        sections: [
+          {
+            properties: {
+              page: {
+                margin: { top: 720, right: 720, bottom: 720, left: 720 },
+              },
+            },
+            children: [
+              headerTable,
+              new Paragraph({ text: "", spacing: { after: 300 } }),
+              new Paragraph({
+                // PeriodLabel truyền vào sẽ là "THÁNG 09/2026" hoặc "NĂM 2026"
+                children: [new TextRun({ text: `SỔ THEO DÕI XUẤT HÀNG ${periodLabel}`, bold: true, size: 36, color: "000000" })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 300 },
+              }),
+              new Table({
+                layout: TableLayoutType.FIXED,
+                columnWidths: colWidths, 
+                rows: dataTableRows,
+              }),
+            ],
+          },
+        ],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const safeName = periodLabel.replace(/[\s\/]/g, '_');
+      saveAs(blob, `So_Theo_Doi_Xuat_Hang_${safeName}.docx`);
+    } catch (error) {
+      console.error("LỖI XUẤT WORD:", error);
+      alert("Đã xảy ra lỗi khi tạo file Word: " + error.message);
+    }
+  };
+
+  const exportToCSV = (dataList, periodLabel) => {
     const headers = [
       'STT', 'Mã đơn', 'Ngày', 'Khách hàng', 'SĐT', 'Địa chỉ giao', 'Hàng hóa', 
       'SL', 'Đơn vị VC', 'Tài xế', 'Biển số', 'Giờ xuất', 'Dự kiến đến', 
       'Giờ giao thực tế', 'Trạng thái', 'Phí VC', 'Tiền hàng', 'Người nhận', 'Ghi chú'
     ];
-    const rows = filteredDeliveries.map((d, index) => [
+    const rows = dataList.map((d, index) => [
       index + 1, d.order_code, d.order_date, d.customer_name, d.phone, `"${d.delivery_address || ''}"`, 
       d.product_name, d.quantity, d.carrier_unit, d.driver_name, d.license_plate, 
       d.departure_time || '', d.estimated_arrival || '', d.actual_arrival || '', 
@@ -170,7 +412,8 @@ export default function App() {
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Xuat_Van_Chuyen_${new Date().toISOString().split('T')[0]}.csv`;
+    const safeName = periodLabel.replace(/[\s\/]/g, '_');
+    link.download = `Xuat_Van_Chuyen_${safeName}.csv`;
     link.click();
   };
 
@@ -225,6 +468,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       
+      {/* WEBSITE HEADER */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -254,9 +498,7 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-2xl font-bold text-blue-700 mb-6 tracking-wide">TỔNG HỢP VẬN CHUYỂN</h2>
-            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-10">
-              
               <div className="space-y-10">
                 <table className="w-full text-sm">
                   <tbody className="divide-y divide-slate-100">
@@ -294,30 +536,7 @@ export default function App() {
                     </tr>
                   </tbody>
                 </table>
-
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-100">
-                      <th className="py-3 px-2 text-left">Tài xế</th>
-                      <th className="py-3 px-2 text-right">Số chuyến</th>
-                      <th className="py-3 px-2 text-right">Phí vận chuyển</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {driverArray.map((driver, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 text-slate-700">
-                        <td className="py-3 px-2 font-medium">{driver.name}</td>
-                        <td className="py-3 px-2 text-right">{driver.count}</td>
-                        <td className="py-3 px-2 text-right">{driver.fee.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {driverArray.length === 0 && (
-                      <tr><td colSpan="3" className="py-4 text-center text-slate-400">Chưa có dữ liệu</td></tr>
-                    )}
-                  </tbody>
-                </table>
               </div>
-
               <div className="space-y-10">
                 <div className="p-6 flex flex-col items-center bg-slate-50/50 rounded-2xl border border-slate-100 shadow-sm">
                   <h3 className="font-bold text-slate-500 mb-6 text-sm uppercase tracking-wider">Tỷ lệ theo trạng thái</h3>
@@ -336,7 +555,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         )}
@@ -379,7 +597,6 @@ export default function App() {
                 
                 <form onSubmit={handleSubmit} className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-5">
-                    
                     <div>
                       <label className={labelClass}>Mã đơn <span className="text-rose-500">*</span></label>
                       <div className="flex gap-2">
@@ -389,37 +606,26 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-
                     <div><label className={labelClass}>Ngày <span className="text-rose-500">*</span></label><input required type="date" name="order_date" value={formData.order_date} onChange={handleInputChange} className={inputClass} /></div>
                     <div><label className={labelClass}>Khách hàng <span className="text-rose-500">*</span></label><input required name="customer_name" value={formData.customer_name} onChange={handleInputChange} placeholder="Tên khách hàng" className={inputClass} /></div>
                     <div><label className={labelClass}>Số điện thoại</label><input name="phone" value={formData.phone} onChange={handleInputChange} placeholder="SĐT khách" className={inputClass} /></div>
-                    
                     <div className="md:col-span-2"><label className={labelClass}>Địa chỉ giao</label><input name="delivery_address" value={formData.delivery_address} onChange={handleInputChange} placeholder="Địa chỉ chi tiết" className={inputClass} /></div>
                     <div><label className={labelClass}>Hàng hóa</label><input name="product_name" value={formData.product_name} onChange={handleInputChange} placeholder="Tên hàng hóa" className={inputClass} /></div>
-                    
                     <div><label className={labelClass}>Số lượng</label><input type="number" name="quantity" value={formData.quantity} onChange={handleInputChange} placeholder="0" className={inputClass} /></div>
-
-                    {/* Ô ĐƠN GIÁ ĐỂ TÍNH TIỀN TỰ ĐỘNG */}
                     <div><label className={labelClass}>Đơn giá (VNĐ)</label><input type="number" name="unit_price" value={formData.unit_price} onChange={handleInputChange} placeholder="VD: 139" className={inputClass} /></div>
-
                     <div><label className={labelClass}>Đơn vị VC</label><select name="carrier_unit" value={formData.carrier_unit} onChange={handleInputChange} className={inputClass}>{carrierUnits.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                     <div><label className={labelClass}>Tài xế</label><input name="driver_name" value={formData.driver_name} onChange={handleInputChange} placeholder="Tên tài xế" className={inputClass} /></div>
                     <div><label className={labelClass}>Biển số</label><input name="license_plate" value={formData.license_plate} onChange={handleInputChange} placeholder="BKS xe" className={inputClass} /></div>
                     <div><label className={labelClass}>Trạng thái</label><select name="status" value={formData.status} onChange={handleInputChange} className={inputClass}>{statuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-
                     <div><label className={labelClass}>Giờ xuất</label><input type="time" name="departure_time" value={formData.departure_time} onChange={handleInputChange} className={inputClass} /></div>
                     <div><label className={labelClass}>Dự kiến đến</label><input type="time" name="estimated_arrival" value={formData.estimated_arrival} onChange={handleInputChange} className={inputClass} /></div>
                     <div><label className={labelClass}>Giờ giao thực tế</label><input type="time" name="actual_arrival" value={formData.actual_arrival} onChange={handleInputChange} className={inputClass} /></div>
                     <div><label className={labelClass}>Người nhận</label><input name="receiver_name" value={formData.receiver_name} onChange={handleInputChange} placeholder="Tên người nhận" className={inputClass} /></div>
-
                     <div className="md:col-span-2"><label className={labelClass}>Phí vận chuyển (VNĐ)</label><input type="number" name="shipping_fee" value={formData.shipping_fee} onChange={handleInputChange} placeholder="0" className={inputClass} /></div>
-                    
-                    {/* TIỀN HÀNG TỰ ĐỘNG NHẢY SỐ */}
                     <div className="md:col-span-2">
                       <label className={labelClass}>Tiền hàng (VNĐ) <span className="text-indigo-600 font-semibold">(Tự tính)</span></label>
                       <input type="number" name="order_amount" value={formData.order_amount} onChange={handleInputChange} placeholder="0" className={inputClass} />
                     </div>
-
                     <div className="md:col-span-4"><label className={labelClass}>Ghi chú</label><input name="notes" value={formData.notes} onChange={handleInputChange} placeholder="Nhập ghi chú thêm..." className={inputClass} /></div>
                   </div>
 
@@ -437,95 +643,148 @@ export default function App() {
               </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
-                <h2 className="text-lg font-bold text-slate-800">
-                  Danh Sách Đơn Hàng 
-                  <span className="ml-2 text-sm font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{filteredDeliveries.length} kết quả</span>
-                </h2>
-                <button onClick={exportToCSV} className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-                  <Download size={16} /> Xuất File CSV
-                </button>
+            {/* RENDER BẢNG DỮ LIỆU TÁCH THEO TỪNG NĂM & THÁNG */}
+            {sortedYears.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500">
+                Không tìm thấy đơn hàng nào phù hợp với bộ lọc.
               </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse whitespace-nowrap">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-medium border-b border-slate-200">
-                      <th className="px-4 py-4">STT</th>
-                      <th className="px-4 py-4">Mã đơn</th>
-                      <th className="px-4 py-4">Ngày</th>
-                      <th className="px-4 py-4">Khách hàng</th>
-                      <th className="px-4 py-4">SĐT</th>
-                      <th className="px-4 py-4">Địa chỉ giao</th>
-                      <th className="px-4 py-4">Hàng hóa</th>
-                      <th className="px-4 py-4 text-center">SL</th>
-                      <th className="px-4 py-4">Đơn vị VC</th>
-                      <th className="px-4 py-4">Tài xế</th>
-                      <th className="px-4 py-4">Biển số</th>
-                      <th className="px-4 py-4">Giờ xuất</th>
-                      <th className="px-4 py-4">Dự kiến</th>
-                      <th className="px-4 py-4">Giờ TT</th>
-                      <th className="px-4 py-4">Trạng thái</th>
-                      <th className="px-4 py-4 text-right">Phí VC</th>
-                      <th className="px-4 py-4 text-right">Tiền hàng</th>
-                      <th className="px-4 py-4">Người nhận</th>
-                      <th className="px-4 py-4">Ghi chú</th>
-                      <th className="px-4 py-4 sticky right-0 bg-slate-50 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] text-center">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {filteredDeliveries.length === 0 && (
-                      <tr><td colSpan="20" className="text-center py-12 text-slate-400">Không tìm thấy đơn hàng nào phù hợp.</td></tr>
-                    )}
-                    {filteredDeliveries.map((d, index) => (
-                      <tr key={d.id} className={`hover:bg-slate-50/80 text-sm transition-colors ${editingId === d.id ? 'bg-amber-50/50' : ''}`}>
-                        <td className="px-4 py-3 text-slate-400">{index + 1}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-900">{d.order_code}</td>
-                        <td className="px-4 py-3 text-slate-600">{d.order_date}</td>
-                        <td className="px-4 py-3 text-slate-900">{d.customer_name}</td>
-                        <td className="px-4 py-3 text-slate-600">{d.phone}</td>
-                        <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]" title={d.delivery_address}>{d.delivery_address}</td>
-                        <td className="px-4 py-3 text-slate-600">{d.product_name}</td>
-                        <td className="px-4 py-3 text-center text-slate-600">
-                          <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium text-xs">{d.quantity}</span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{d.carrier_unit}</td>
-                        <td className="px-4 py-3 text-slate-600">{d.driver_name}</td>
-                        <td className="px-4 py-3 text-slate-600">{d.license_plate}</td>
-                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">{d.departure_time ? d.departure_time.substring(0,5) : '-'}</td>
-                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">{d.estimated_arrival ? d.estimated_arrival.substring(0,5) : '-'}</td>
-                        <td className="px-4 py-3 text-slate-500 font-mono text-xs">{d.actual_arrival ? d.actual_arrival.substring(0,5) : '-'}</td>
-                        <td className="px-4 py-3">
-                          <select 
-                            value={d.status} 
-                            onChange={(e) => updateStatus(d.id, e.target.value)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer border outline-none transition-colors appearance-none ${getStatusStyle(d.status)}`}
-                          >
-                            {statuses.map(s => <option key={s} value={s} className="bg-white text-slate-900">{s}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-900">{Number(d.shipping_fee || 0).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-medium text-emerald-600">{Number(d.order_amount || 0).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-slate-600">{d.receiver_name}</td>
-                        <td className="px-4 py-3 text-slate-500 truncate max-w-[150px]" title={d.notes}>{d.notes}</td>
-                        
-                        <td className="px-4 py-3 sticky right-0 bg-white group-hover:bg-slate-50/80 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] border-l border-slate-100 transition-colors">
-                          <div className="flex gap-2 justify-center">
-                            <button onClick={() => handleEdit(d)} title="Sửa" className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                              <Edit size={16} strokeWidth={2.5} />
-                            </button>
-                            <button onClick={() => handleDelete(d.id)} title="Xóa" className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
-                              <Trash2 size={16} strokeWidth={2.5} />
-                            </button>
+            ) : (
+              sortedYears.map(year => {
+                const yearDeliveries = groupedByYear[year];
+                
+                // Nhóm tiếp theo từng tháng trong năm đó
+                const groupedByMonth = yearDeliveries.reduce((acc, d) => {
+                  const monthYear = (d.order_date || '').substring(0, 7);
+                  if (!acc[monthYear]) acc[monthYear] = [];
+                  acc[monthYear].push(d);
+                  return acc;
+                }, {});
+                const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
+
+                return (
+                  <div key={year} className="mb-14 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    
+                    {/* BẢNG ĐIỀU KHIỂN & DOWNLOAD CHO CẢ NĂM */}
+                    <div className="bg-slate-800 rounded-2xl shadow-md border border-slate-700 px-6 py-5 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                      <div>
+                        <h2 className="text-xl font-bold text-white whitespace-nowrap">
+                          Danh Sách Đơn Hàng Năm {year}
+                        </h2>
+                        <p className="text-sm text-slate-400 mt-1">Tổng cộng {yearDeliveries.length} chuyến hàng trong năm</p>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <button onClick={() => exportToDocx(yearDeliveries, `NĂM ${year}`)} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                          <FileText size={18} /> Tải Sổ Năm {year} (.docx)
+                        </button>
+                        <button onClick={() => exportToCSV(yearDeliveries, `NĂM ${year}`)} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                          <Download size={18} /> Xuất CSV
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* VÒNG LẶP RENDER CÁC THÁNG TRONG NĂM */}
+                    {sortedMonths.map(monthYear => {
+                      const monthData = groupedByMonth[monthYear];
+                      const monthTitle = formatMonthYear(monthYear);
+
+                      return (
+                        <div key={monthYear} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8 lg:ml-8 border-l-4 border-l-indigo-500">
+                          <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50 flex flex-col lg:flex-row lg:justify-between items-center gap-4">
+                            <h2 className="text-lg font-bold text-slate-800 whitespace-nowrap">
+                              Dữ Liệu Tháng {monthTitle}
+                              <span className="ml-2 text-sm font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{monthData.length} đơn</span>
+                            </h2>
+                            <div className="flex flex-wrap gap-2">
+                              <button onClick={() => exportToDocx(monthData, `THÁNG ${monthTitle}`)} className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                                <FileText size={16} /> Tải Sổ Word (.docx)
+                              </button>
+                              <button onClick={() => exportToCSV(monthData, `THÁNG ${monthTitle}`)} className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                                <Download size={16} /> Xuất File CSV
+                              </button>
+                            </div>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                          
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse whitespace-nowrap">
+                              <thead>
+                                <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-medium border-b border-slate-200">
+                                  <th className="px-4 py-4">STT</th>
+                                  <th className="px-4 py-4">Mã đơn</th>
+                                  <th className="px-4 py-4">Ngày</th>
+                                  <th className="px-4 py-4">Khách hàng</th>
+                                  <th className="px-4 py-4">SĐT</th>
+                                  <th className="px-4 py-4">Địa chỉ giao</th>
+                                  <th className="px-4 py-4">Hàng hóa</th>
+                                  <th className="px-4 py-4 text-center">SL</th>
+                                  <th className="px-4 py-4">Đơn vị VC</th>
+                                  <th className="px-4 py-4">Tài xế</th>
+                                  <th className="px-4 py-4">Biển số</th>
+                                  <th className="px-4 py-4">Giờ xuất</th>
+                                  <th className="px-4 py-4">Dự kiến</th>
+                                  <th className="px-4 py-4">Giờ TT</th>
+                                  <th className="px-4 py-4">Trạng thái</th>
+                                  <th className="px-4 py-4 text-right">Phí VC</th>
+                                  <th className="px-4 py-4 text-right">Tiền hàng</th>
+                                  <th className="px-4 py-4">Người nhận</th>
+                                  <th className="px-4 py-4">Ghi chú</th>
+                                  <th className="px-4 py-4 sticky right-0 bg-slate-50 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] text-center">Thao tác</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 bg-white">
+                                {monthData.map((d, index) => (
+                                  <tr key={d.id} className={`hover:bg-slate-50/80 text-sm transition-colors ${editingId === d.id ? 'bg-amber-50/50' : ''}`}>
+                                    <td className="px-4 py-3 text-slate-400">{index + 1}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-900">{d.order_code}</td>
+                                    <td className="px-4 py-3 text-slate-600">{d.order_date}</td>
+                                    <td className="px-4 py-3 text-slate-900">{d.customer_name}</td>
+                                    <td className="px-4 py-3 text-slate-600">{d.phone}</td>
+                                    <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]" title={d.delivery_address}>{d.delivery_address}</td>
+                                    <td className="px-4 py-3 text-slate-600">{d.product_name}</td>
+                                    <td className="px-4 py-3 text-center text-slate-600">
+                                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium text-xs">{d.quantity}</span>
+                                    </td>
+                                    <td className="px-4 py-3 text-slate-600">{d.carrier_unit}</td>
+                                    <td className="px-4 py-3 text-slate-600">{d.driver_name}</td>
+                                    <td className="px-4 py-3 text-slate-600">{d.license_plate}</td>
+                                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">{d.departure_time ? d.departure_time.substring(0,5) : '-'}</td>
+                                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">{d.estimated_arrival ? d.estimated_arrival.substring(0,5) : '-'}</td>
+                                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">{d.actual_arrival ? d.actual_arrival.substring(0,5) : '-'}</td>
+                                    <td className="px-4 py-3">
+                                      <select 
+                                        value={d.status} 
+                                        onChange={(e) => updateStatus(d.id, e.target.value)}
+                                        className={`px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer border outline-none transition-colors appearance-none ${getStatusStyle(d.status)}`}
+                                      >
+                                        {statuses.map(s => <option key={s} value={s} className="bg-white text-slate-900">{s}</option>)}
+                                      </select>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-medium text-slate-900">{Number(d.shipping_fee || 0).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right font-medium text-emerald-600">{Number(d.order_amount || 0).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-slate-600">{d.receiver_name}</td>
+                                    <td className="px-4 py-3 text-slate-500 truncate max-w-[150px]" title={d.notes}>{d.notes}</td>
+                                    
+                                    <td className="px-4 py-3 sticky right-0 bg-white group-hover:bg-slate-50/80 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] border-l border-slate-100 transition-colors">
+                                      <div className="flex gap-2 justify-center">
+                                        <button onClick={() => handleEdit(d)} title="Sửa" className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                                          <Edit size={16} strokeWidth={2.5} />
+                                        </button>
+                                        <button onClick={() => handleDelete(d.id)} title="Xóa" className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                                          <Trash2 size={16} strokeWidth={2.5} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 
@@ -539,7 +798,7 @@ export default function App() {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-3">Hướng Dẫn Sử Dụng Hệ Thống</h2>
                 <p className="text-slate-500 max-w-xl mx-auto">
-                  Ứng dụng quản lý vận chuyển nội bộ. Giao diện tối giản, lưu trữ đám mây thời gian thực, thay thế hoàn toàn quy trình sử dụng Excel truyền thống.
+                  Ứng dụng quản lý vận chuyển nội bộ. Giao diện tối giản, lưu trữ đám mây thời gian thực.
                 </p>
               </div>
 
@@ -547,10 +806,10 @@ export default function App() {
                 <section>
                   <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-3">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600 text-sm">1</span> 
-                    Tính năng tự động nhân đơn giá
+                    Xuất file Báo Cáo
                   </h3>
                   <div className="ml-11 text-slate-600 text-sm leading-relaxed space-y-3">
-                    <p>Khi nhập <b>Số lượng</b> và <b>Đơn giá</b>, hệ thống sẽ tự động nhân kết quả và điền thẳng vào ô <b>Tiền hàng</b> giúp bạn.</p>
+                    <p>Hệ thống tự động nhóm các đơn hàng theo từng khung thời gian tương ứng. Bạn có thể nhấn nút <b>Tải Sổ Word (.docx)</b> ở cấp độ Năm hoặc Tháng để xuất danh sách tương ứng có kèm theo hình ảnh logo Thủy Sản Đại Việt một cách cực kỳ ngay ngắn và chỉnh chu[cite: 1, 2].</p>
                   </div>
                 </section>
               </div>
